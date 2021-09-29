@@ -52,7 +52,7 @@ function entity_plus_get_property_info($entity_plus_type = NULL) {
  *
  * @see hook_entity_property_info()
  */
-function entity_property_info_defaults() {
+function entity_plus_property_info_defaults() {
   return array(
     'type' => 'text',
     'getter callback' => 'entity_plus_property_verbatim_get',
@@ -200,6 +200,9 @@ function entity_plus_field_info_alter(&$field_info) {
     $field_info['image']['property_type'] = 'field_item_image';
     $field_info['image']['property_callbacks'][] = 'entity_plus_metadata_field_file_callback';
     $field_info['image']['property_callbacks'][] = 'entity_plus_metadata_field_image_callback';
+  }
+  if (module_exists('email')) {
+    $field_info['email']['property_type'] = 'text';
   }
 }
 

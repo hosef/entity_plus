@@ -27,6 +27,21 @@ interface EntityPlusControllerInterface extends EntityControllerInterface {
    */
   public function invoke($hook, $entity);
 
+	/**
+   * Checks if the entity has a certain exportable status.
+   *
+   * @param $status
+   *   A status constant, i.e. one of ENTITY_CUSTOM, ENTITY_IN_CODE,
+   *   ENTITY_OVERRIDDEN or ENTITY_FIXED.
+   *
+   * @return bool
+   *   For exportable entities TRUE if the entity has the status, else FALSE.
+   *   In case the entity is not exportable, NULL is returned.
+   *
+   * @see entity_has_status()
+   */
+  public function hasStatus($status);
+
   /**
    * Permanently saves the given entity.
    *
@@ -111,7 +126,7 @@ interface EntityPlusControllerInterface extends EntityControllerInterface {
    *   in another context. If FALSE the entity will be displayed with its title
    *   in a mode suitable for lists.
    *   If unset, the page mode will be enabled if the current path is the URI
-   *   of the entity, as returned by entity_plus_uri().
+   *   of the entity, as returned by entity_uri().
    *   This parameter is only supported for entities which controller is a
    *   EntityPlusControllerInterface.
    * @return
@@ -378,6 +393,9 @@ class EntityPlusController extends DefaultEntityController implements EntityPlus
     // Invoke the respective entity level hook.
     if ($hook == 'presave' || $hook == 'insert' || $hook == 'update' || $hook == 'delete') {
       if (is_a($entity, 'Entity')) {
+        // Invoke all regular entity hooks as well as entity_plus hooks.
+        // See https://github.com/backdrop-contrib/entity_plus/issues/35
+        module_invoke_all('entity_' . $hook, $entity, $this->entityType);
         module_invoke_all('entity_plus_' . $hook, $entity, $this->entityType);
       }
     }
@@ -448,6 +466,15 @@ class EntityPlusController extends DefaultEntityController implements EntityPlus
       return TRUE;
     }
     return FALSE;
+  }
+
+	/**
+   * {@inheritdoc}
+   */
+  public function hasStatus($status) {
+    if (!empty($this->entityInfo['exportable'])) {
+      return isset($this->{$this->statusKey}) && ($this->{$this->statusKey} & $status) == $status;
+    }
   }
 
   /**
@@ -655,21 +682,22 @@ class EntityPlusController extends DefaultEntityController implements EntityPlus
   }
 
   /**
-   * Renders a single entity property.
+   * Creates a render array for a single entity property.
    */
   protected function renderEntityProperty($wrapper, $name, $property, $view_mode, $langcode, &$content) {
     $info = $property->info();
 
     $content[$name] = array(
-      '#label_hidden' => FALSE,
+      '#label_display' => 'above', // Options are 'above', 'inline', 'hidden'
       '#label' => $info['label'],
       '#entity_plus_wrapped' => $wrapper,
       '#theme' => 'entity_plus_property',
       '#property_name' => $name,
       '#access' => $property->access('view'),
-      '#entity_plus_type' => $this->entityType,
+      '#entity_type' => $this->entityType,
+      '#access' => !(empty($property->value())), // hide display for empty properties
     );
-    $content['#attached']['css']['entity.theme'] = backdrop_get_path('module', 'entity') . '/theme/entity.theme.css';
+    $content['#attached']['css']['entity_plus.theme'] = backdrop_get_path('module', 'entity_plus') . '/theme/entity_plus.theme.css';
   }
 
   /**
@@ -769,7 +797,7 @@ class EntityPlusControllerExportable extends EntityPlusController {
     $passed_ids = !empty($ids) ? array_flip($ids) : FALSE;
 
     // Care about the static cache.
-    if ($this->cache && !$revision_id) {
+    if ($this->staticCache && !$revision_id) {
       $entities = $this->cacheGetByName($ids, $conditions);
     }
     // If any entities were loaded, remove them from the ids still to load.
